@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { CreateWebWorkerMLCEngine } from '@mlc-ai/web-llm'
+import { CreateWebWorkerMLCEngine, prebuiltAppConfig } from '@mlc-ai/web-llm'
 
 const systemPromptForWheaterAsistant = `
   You are a helpful Weather Assistant.
@@ -101,7 +101,7 @@ const getWeather = async (locationOrCoordinates) => {
       return 'N/A'
     }
 
-    const summary = `The current weather for "${name}, ${country}" is ${current.temperature_2m}°C, humidity: ${
+    const summary = `The current weather for your location is ${current.temperature_2m}°C, humidity: ${
       current.relative_humidity_2m
     }%, wind: ${current.wind_speed_10m} km/h.
     Today's Forecast:
@@ -126,15 +126,14 @@ const getVoice = (languageCode) => {
 function App() {
   const [status, setStatus] = useState('Waiting')
   const [engine, setEngine] = useState(null)
+  const [selectedModel, setSelectedModel] = useState('Phi-3.5-mini-instruct-q4f16_1-MLC')
+  const currentModelRef = useRef(null)
 
-  const [input, setInput] = useState('')
   const [response, setResponse] = useState('')
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isThinking, setIsThinking] = useState(false)
-
-  const modelName = 'Phi-3.5-mini-instruct-q4f16_1-MLC'
 
   const worker = useRef(null)
 
@@ -142,7 +141,7 @@ function App() {
     window.speechSynthesis.getVoices()
   }, [])
 
-  const loadModel = async () => {
+  const loadModel = async (modelId) => {
     setStatus('Initializing worker...')
 
     if (!worker.current) {
@@ -150,13 +149,14 @@ function App() {
     }
 
     try {
-      const engineInstance = await CreateWebWorkerMLCEngine(worker.current, modelName, {
+      const engineInstance = await CreateWebWorkerMLCEngine(worker.current, modelId, {
         initProgressCallback: (info) => {
           setStatus(info.text)
         },
       })
 
       setEngine(engineInstance)
+      currentModelRef.current = modelId
       setStatus('Model ready! 🚀')
     } catch (e) {
       console.error(e)
@@ -189,14 +189,18 @@ function App() {
     setIsSpeaking(false)
   }
 
-  const handleLocationClick = () => {
+  const handleLocationClick = async () => {
     if (!navigator.geolocation) {
       alert('Your browser does not support geolocation')
       return
     }
 
+    if (!engine || currentModelRef.current !== selectedModel) {
+      await loadModel(selectedModel)
+    }
+
     setIsThinking(true)
-    setInput('Querying your current location...')
+    setStatus('Querying your current location...')
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -211,7 +215,6 @@ function App() {
         console.error(error)
         setIsThinking(false)
         alert('Cannot get your location. Please check permissions.')
-        setInput('')
       },
     )
   }
@@ -239,6 +242,7 @@ function App() {
 
       let fullText = ''
       setResponse('')
+      setStatus('Done')
       for await (const chunk of completion) {
         const delta = chunk.choices[0]?.delta?.content || ''
         fullText += delta
@@ -251,105 +255,6 @@ function App() {
     } finally {
       setIsGenerating(false)
       setIsThinking(false)
-      setInput('')
-    }
-  }
-
-  const handleSend = async () => {
-    if (!engine || !input) return
-    stopSpeaking()
-
-    setIsGenerating(true)
-    setResponse('')
-
-    const userQuestion = `[USER-QUESTION]: ${input}`
-
-    const isWeatherQuery = /weather|temperature|rain|sun|forecast|clima/i.test(userQuestion)
-
-    let contextData = ''
-
-    if (isWeatherQuery) {
-      setIsThinking(true)
-
-      try {
-        const extractionReply = await engine.chat.completions.create({
-          messages: [
-            {
-              role: 'system',
-              content: `You are a city name extractor. You do not answer questions about weather. You only extract the city name in English.
-              
-              Examples:
-              
-              User: "Clima en Ciudad de México",
-              Assistant: "Mexico City"
-
-              User: "What is the weather in London?",
-              Assistant: "London"
-              
-              User: "Is it raining in Paris?",
-              Assistant: "Paris"
-              
-              User: "Tell me a joke",
-              Assistant: "UNKNOWN"
-              
-              Return ONLY the city name in English without any additional text or symbols.`,
-            },
-            { role: 'user', content: userQuestion },
-          ],
-          temperature: 0,
-          max_tokens: 20,
-        })
-
-        let city = extractionReply.choices[0].message.content.trim()
-        city = city.replace(/The city is /i, '').replace(/\.$/, '')
-
-        console.log('Ciudad detectada (Raw):', city)
-
-        if (city && city !== 'UNKNOWN') {
-          setStatus(`Checking weather in ${city}...`)
-          const weatherInfo = await getWeather(city)
-          if (weatherInfo) {
-            contextData = `[REAL-TIME DATA]: ${weatherInfo}`
-          }
-        }
-      } catch (e) {
-        console.error('Error fetching weather:', e)
-      } finally {
-        setIsThinking(false)
-        setStatus('Model ready! 🚀')
-      }
-    }
-
-    // const currentInput = input
-    // setInput('')
-
-    try {
-      const systemPrompt = {
-        role: 'system',
-        content: systemPromptForWheaterAsistant,
-      }
-
-      console.log('final user question:', userQuestion + contextData)
-
-      const completion = await engine.chat.completions.create({
-        messages: [systemPrompt, { role: 'user', content: `${userQuestion} ${contextData}` }],
-        temperature: 0.7,
-        stream: true,
-      })
-
-      let fullText = ''
-
-      for await (const chunk of completion) {
-        const delta = chunk.choices[0]?.delta?.content || ''
-        fullText += delta
-        setResponse((prev) => prev + delta)
-      }
-      speak(fullText)
-    } catch (e) {
-      console.error(e)
-      setResponse((prev) => prev + '\n[Error generating response]')
-    } finally {
-      setIsGenerating(false)
     }
   }
 
@@ -357,7 +262,18 @@ function App() {
     <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
       <h1>Weather AI 🌤️</h1>
       <h4>
-        <pre>{modelName}</pre>
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          disabled={isGenerating || isThinking || status.includes('Initializing') || status.includes('Loading')}
+          style={{ padding: '8px', fontSize: '14px', borderRadius: '4px' }}
+        >
+          {prebuiltAppConfig.model_list.map((model) => (
+            <option key={model.model_id} value={model.model_id}>
+              {model.model_id}
+            </option>
+          ))}
+        </select>
       </h4>
 
       <div style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -365,37 +281,17 @@ function App() {
       </div>
 
       {!engine && (
-        <button onClick={loadModel} style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}>
+        <button
+          onClick={() => loadModel(selectedModel)}
+          style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
+        >
           Load Model
         </button>
       )}
 
-      {status.includes('ready') && (
+      {engine && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask something..."
-            style={{ padding: '10px', height: '100px', fontSize: '16px' }}
-          />
-
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={handleSend}
-              disabled={isGenerating || isThinking}
-              style={{
-                flex: 1,
-                padding: '12px',
-                cursor: isGenerating || isThinking ? 'not-allowed' : 'pointer',
-                background: '#007bff',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-              }}
-            >
-              {isThinking ? 'Searching API...' : isGenerating ? 'Generating...' : 'Get Weather'}
-            </button>
-
             <button
               onClick={handleLocationClick}
               disabled={isGenerating || isThinking}
@@ -408,15 +304,23 @@ function App() {
                 cursor: 'pointer',
                 fontSize: '20px',
               }}
-              title="Usar mi ubicación GPS"
+              title="Get my daily weather & style!"
             >
-              📍
+              Get my daily weather & style!
             </button>
           </div>
 
           {response && (
             <>
-              <div style={{ padding: '15px', border: '1px solid #ddd', borderRadius: '8px', background: '#fff' }}>
+              <div
+                style={{
+                  padding: '15px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  background: '#fff',
+                  color: '#333',
+                }}
+              >
                 <p style={{ whiteSpace: 'pre-wrap', marginTop: '10px' }}>{response}</p>
               </div>
 
