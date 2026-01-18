@@ -263,6 +263,7 @@ function App() {
       let fullText = ''
       setResponse('')
       setStatus('Done')
+      setIsThinking(false)
       for await (const chunk of completion) {
         const delta = chunk.choices[0]?.delta?.content || ''
         fullText += delta
@@ -279,14 +280,31 @@ function App() {
   }
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>Weather AI 🌤️</h1>
+    <div
+      style={{
+        padding: '20px',
+        fontFamily: 'Inter, system-ui, Avenir, Helvetica, Arial, sans-serif',
+        maxWidth: '600px',
+        margin: '0 auto',
+        minHeight: '100vh',
+        backgroundColor: '#121212',
+        color: '#e0e0e0',
+      }}
+    >
+      <h1 style={{ color: '#ffffff' }}>Weather AI 🌤️</h1>
       <h4>
         <select
           value={selectedModel}
           onChange={handleModelChange}
           disabled={isGenerating || isThinking || status.includes('Initializing') || status.includes('Loading')}
-          style={{ padding: '8px', fontSize: '14px', borderRadius: '4px' }}
+          style={{
+            padding: '10px',
+            fontSize: '14px',
+            borderRadius: '6px',
+            backgroundColor: '#1e1e1e',
+            color: '#e0e0e0',
+            border: '1px solid #333',
+          }}
         >
           {prebuiltAppConfig.model_list.map((model) => (
             <option key={model.model_id} value={model.model_id}>
@@ -296,14 +314,30 @@ function App() {
         </select>
       </h4>
 
-      <div style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-        Status: <strong>{status}</strong>
+      <div
+        style={{
+          background: '#1e1e1e',
+          padding: '15px',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          border: '1px solid #333',
+        }}
+      >
+        Status: <strong style={{ color: '#4caf50' }}>{status}</strong>
       </div>
 
       {!engine && (
         <button
           onClick={() => loadModel(selectedModel)}
-          style={{ padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
+          style={{
+            padding: '10px 20px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+          }}
         >
           Load Model
         </button>
@@ -317,12 +351,14 @@ function App() {
               disabled={isGenerating || isThinking}
               style={{
                 padding: '12px',
-                background: '#28a745', // Verde para diferenciarlo
+                background: isGenerating || isThinking ? '#444' : '#28a745',
                 color: 'white',
                 border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '20px',
+                borderRadius: '6px',
+                cursor: isGenerating || isThinking ? 'not-allowed' : 'pointer',
+                fontSize: '18px',
+                fontWeight: '600',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
               }}
               title="Get my daily weather & style!"
             >
@@ -334,11 +370,13 @@ function App() {
             <>
               <div
                 style={{
-                  padding: '15px',
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  background: '#fff',
-                  color: '#333',
+                  padding: '20px',
+                  border: '1px solid #333',
+                  borderRadius: '12px',
+                  background: '#1e1e1e',
+                  color: '#e0e0e0',
+                  lineHeight: '1.6',
+                  boxShadow: '0 4px 6px rgba(0,0,0,0.2)',
                 }}
               >
                 <p style={{ whiteSpace: 'pre-wrap', marginTop: '10px' }}>{response}</p>
@@ -347,7 +385,15 @@ function App() {
               <button
                 onClick={() => speak(response)}
                 disabled={isSpeaking}
-                style={{ padding: '12px', marginTop: '10px', cursor: 'pointer', borderRadius: '4px', border: 'none' }}
+                style={{
+                  padding: '12px',
+                  marginTop: '15px',
+                  cursor: isSpeaking ? 'not-allowed' : 'pointer',
+                  borderRadius: '6px',
+                  border: '1px solid #333',
+                  backgroundColor: isSpeaking ? '#333' : '#2d2d2d',
+                  color: '#e0e0e0',
+                }}
               >
                 🔊 Read Again
               </button>
@@ -357,9 +403,12 @@ function App() {
                 disabled={!isSpeaking}
                 style={{
                   padding: '12px',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
+                  border: '1px solid #333',
+                  borderRadius: '6px',
+                  cursor: !isSpeaking ? 'not-allowed' : 'pointer',
+                  backgroundColor: !isSpeaking ? '#2d2d2d' : '#d32f2f',
+                  color: 'white',
+                  marginLeft: '10px',
                 }}
               >
                 Stop Audio 🔇
