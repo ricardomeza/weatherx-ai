@@ -141,6 +141,26 @@ function App() {
     window.speechSynthesis.getVoices()
   }, [])
 
+  const handleModelChange = (e) => {
+    const newModel = e.target.value
+    setSelectedModel(newModel)
+
+    // Reset state
+    setEngine(null)
+    setStatus('Waiting')
+    setResponse('')
+    setIsGenerating(false)
+    setIsSpeaking(false)
+    setIsThinking(false)
+    stopSpeaking()
+
+    // Terminate worker if it exists
+    if (worker.current) {
+      worker.current.terminate()
+      worker.current = null
+    }
+  }
+
   const loadModel = async (modelId) => {
     setStatus('Initializing worker...')
 
@@ -264,7 +284,7 @@ function App() {
       <h4>
         <select
           value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
+          onChange={handleModelChange}
           disabled={isGenerating || isThinking || status.includes('Initializing') || status.includes('Loading')}
           style={{ padding: '8px', fontSize: '14px', borderRadius: '4px' }}
         >
