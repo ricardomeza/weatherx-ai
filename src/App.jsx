@@ -408,7 +408,6 @@ function App() {
                   cursor: !isSpeaking ? 'not-allowed' : 'pointer',
                   backgroundColor: !isSpeaking ? '#2d2d2d' : '#d32f2f',
                   color: 'white',
-                  marginLeft: '10px',
                 }}
               >
                 Stop Audio 🔇
