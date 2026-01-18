@@ -59,16 +59,16 @@ const getWeather = async (locationOrCoordinates) => {
     let latitude, longitude, name, country
 
     if (typeof locationOrCoordinates === 'object' && locationOrCoordinates.lat) {
-      console.log('📍 Usando coordenadas GPS...')
+      console.log('📍 Using GPS coordinates...')
       latitude = locationOrCoordinates.lat
       longitude = locationOrCoordinates.lon
-      name = 'Tu ubicación actual'
+      name = 'Your current location'
       country = 'GPS'
     } else {
-      console.log(`🔍 Buscando coordenadas para: ${locationOrCoords}...`)
+      console.log(`🔍 Searching coordinates for: ${locationOrCoords}...`)
       const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
         locationOrCoords,
-      )}&count=1&language=es&format=json`
+      )}&count=1&language=en&format=json`
       const geoRes = await fetch(geoUrl)
       const geoData = await geoRes.json()
 
@@ -194,7 +194,8 @@ function App() {
     utterance.pitch = 1
     utterance.volume = 1
 
-    const voice = getVoice('es')
+    const browserLang = navigator.language || 'en-US'
+    const voice = getVoice(browserLang) || getVoice(browserLang.split('-')[0]) || getVoice('en')
     if (voice) utterance.voice = voice
 
     utterance.onstart = () => setIsSpeaking(true)
@@ -225,9 +226,30 @@ function App() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords
-        const weatherInfo = await getWeather({ lat: latitude, lon: longitude })
 
-        const userPrompt = '[USER-QUESTION]: ¿Cuál es el clima en mi ubicación actual?'
+        const baseQuestion = 'What is the weather like in my current location?'
+        const browserLang = navigator.language || 'en-US'
+
+        // Run weather fetch and translation in parallel
+        const [weatherInfo, translationComp] = await Promise.all([
+          getWeather({ lat: latitude, lon: longitude }),
+          engine.chat.completions.create({
+            messages: [
+              {
+                role: 'system',
+                content: `Translate the following text to the locale "${browserLang}". Return ONLY the translated text, no quotes or explanations.`,
+              },
+              {
+                role: 'user',
+                content: baseQuestion,
+              },
+            ],
+            temperature: 0.1,
+          }),
+        ])
+
+        const translatedQuestion = translationComp.choices[0]?.message?.content?.trim() || baseQuestion
+        const userPrompt = `[USER-QUESTION]: ${translatedQuestion}`
 
         generateResponse(userPrompt, weatherInfo)
       },
