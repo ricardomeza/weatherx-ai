@@ -118,9 +118,12 @@ const getWeather = async (locationOrCoordinates) => {
   }
 }
 
-const getVoice = (languageCode) => {
-  const voices = window.speechSynthesis.getVoices()
-  return voices.find((voice) => voice.lang.startsWith(languageCode))
+const getVoice = (languageCode, availableVoices) => {
+  const matchingVoices = availableVoices.filter((voice) => voice.lang.startsWith(languageCode))
+  const preferredVoice = matchingVoices.find(
+    (voice) => voice.name.includes('Google') || voice.name.includes('Microsoft'),
+  )
+  return preferredVoice || matchingVoices[0]
 }
 
 function App() {
@@ -128,6 +131,7 @@ function App() {
   const [engine, setEngine] = useState(null)
   const [selectedModel, setSelectedModel] = useState('Phi-3.5-mini-instruct-q4f16_1-MLC')
   const currentModelRef = useRef(null)
+  const [availableVoices, setAvailableVoices] = useState([])
 
   const [response, setResponse] = useState('')
 
@@ -138,7 +142,18 @@ function App() {
   const worker = useRef(null)
 
   useEffect(() => {
-    window.speechSynthesis.getVoices()
+    // Load voices immediately
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices()
+      setAvailableVoices(voices)
+    }
+    loadVoices()
+    // Also listen for async voice loading
+    window.speechSynthesis.onvoiceschanged = loadVoices
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null
+    }
   }, [])
 
   const handleModelChange = (e) => {
@@ -195,7 +210,10 @@ function App() {
     utterance.volume = 1
 
     const browserLang = navigator.language || 'en-US'
-    const voice = getVoice(browserLang) || getVoice(browserLang.split('-')[0]) || getVoice('en')
+    const voice =
+      getVoice(browserLang, availableVoices) ||
+      getVoice(browserLang.split('-')[0], availableVoices) ||
+      getVoice('en', availableVoices)
     if (voice) utterance.voice = voice
 
     utterance.onstart = () => setIsSpeaking(true)
@@ -369,7 +387,7 @@ function App() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={handleLocationClick}
+              onClick={() => handleLocationClick()}
               disabled={isGenerating || isThinking}
               style={{
                 padding: '12px',
